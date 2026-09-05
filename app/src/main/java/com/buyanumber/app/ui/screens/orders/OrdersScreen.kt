@@ -29,10 +29,12 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.buyanumber.app.domain.model.NumberOrder
+import com.buyanumber.app.domain.model.OrderSort
 import com.buyanumber.app.ui.components.EmptyState
 import com.buyanumber.app.ui.components.ErrorBanner
 import com.buyanumber.app.ui.components.LoadingState
 import com.buyanumber.app.ui.components.OrderCard
+import com.buyanumber.app.ui.components.SortMenu
 
 /** Every number the account has bought: live ones first, then the archive. */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -58,7 +60,17 @@ fun OrdersScreen(
     }
 
     Column(Modifier.fillMaxSize()) {
-        TopAppBar(title = { Text("Your numbers") })
+        TopAppBar(
+            title = { Text("Your numbers") },
+            actions = {
+                SortMenu(
+                    selected = state.sort,
+                    options = OrderSort.entries,
+                    label = OrderSort::label,
+                    onSelect = viewModel::setSort,
+                )
+            },
+        )
 
         if (state.isLoading) {
             LoadingState()

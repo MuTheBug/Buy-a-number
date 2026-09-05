@@ -14,6 +14,20 @@ see what you are paying for before you commit. Both pickers are searchable,
 which matters when the catalog runs to ~200 countries and several hundred
 services.
 
+**Sort** — operators sort by price (either direction), remaining stock or
+success rate; services by name, price or stock; order history by newest or
+oldest. Sold-out rows always sink to the bottom, whatever the sort — a sold-out
+operator at a great price is still not something you can buy. Your choice is
+remembered. Catalog sorting is local, so switching costs nothing; order history
+sorts through 5sim's own paging parameters, because sorting one loaded page
+would misrepresent the whole list.
+
+**Add funds** — top up without leaving the app. 5sim's API is read-only where
+money is concerned, so the payment itself happens on their hosted page (opened
+in a tab over the app, so no card details ever reach this code). The balance is
+snapshotted before the hand-off and polled on return, so the moment the money
+lands you get a confirmation instead of having to go looking.
+
 **Check messages** — the order screen shows the number with a one-tap copy
 button, a live countdown to expiry, and the SMS thread as it fills in. It polls
 every five seconds while the order is open. The verification code is pulled out
@@ -62,7 +76,7 @@ sign in.
 | --- | --- |
 | `GET user/profile` | Balance, rating, key validation |
 | `GET user/orders` | Order history (paginated) |
-| `GET user/payments` | Payment history |
+| `GET user/payments` | Payment history, and confirming a top-up landed |
 | `GET user/buy/activation/{country}/{operator}/{product}` | Buying a number |
 | `GET user/check/{id}` | Polling for SMS |
 | `GET user/finish/{id}` | Closing a used order |
@@ -72,6 +86,10 @@ sign in.
 | `GET guest/countries` | Country list, ISO codes and dialling prefixes |
 | `GET guest/products/{country}/{operator}` | Services for a country |
 | `GET guest/prices?country=&product=` | Per-operator price, stock, success rate |
+
+Note what is **not** there: 5sim has no deposit endpoint. `user/payments` reads
+history but nothing creates a payment, which is why topping up opens
+`https://5sim.net/payment` in a Custom Tab rather than posting to an API.
 
 Two quirks of the API are handled explicitly, because both would otherwise
 surface as confusing crashes:
@@ -116,6 +134,8 @@ so a killed worker process does not replay old alerts.
 ./gradlew testDebugUnitTest
 ```
 
-Covers verification-code extraction, the timestamp formats 5sim emits, the
-plain-text error mapping (end to end through OkHttp with MockWebServer), every
-shape of the `guest/prices` tree, and the documented response payloads.
+49 tests covering verification-code extraction, the timestamp formats 5sim
+emits, the plain-text error mapping (end to end through OkHttp with
+MockWebServer), every shape of the `guest/prices` tree, the documented response
+payloads, and every sort comparator including the sold-out and missing-rate
+edge cases.

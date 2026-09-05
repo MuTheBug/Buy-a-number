@@ -43,12 +43,15 @@ import com.buyanumber.app.core.formatRate
 import com.buyanumber.app.core.toDisplayName
 import com.buyanumber.app.domain.model.CountryInfo
 import com.buyanumber.app.domain.model.Offer
+import com.buyanumber.app.domain.model.OfferSort
+import com.buyanumber.app.domain.model.ServiceSort
 import com.buyanumber.app.domain.model.ServiceSummary
 import com.buyanumber.app.ui.components.EmptyState
 import com.buyanumber.app.ui.components.ErrorBanner
 import com.buyanumber.app.ui.components.ErrorState
 import com.buyanumber.app.ui.components.LoadingState
 import com.buyanumber.app.ui.components.SearchableSheet
+import com.buyanumber.app.ui.components.SortMenu
 
 /**
  * Country → service → operator, then buy. Each step only unlocks once the
@@ -81,6 +84,7 @@ fun BuyScreen(
                 state = state,
                 onOpenStep = { openStep = it },
                 onBuy = viewModel::buy,
+                onOfferSortChange = viewModel::setOfferSort,
             )
         }
     }
@@ -113,6 +117,14 @@ fun BuyScreen(
             placeholder = "Search services",
             emptyMessage = if (state.isLoadingServices) "Loading services…" else "No services here.",
             onDismiss = { openStep = null },
+            headerAction = {
+                SortMenu(
+                    selected = state.serviceSort,
+                    options = ServiceSort.entries,
+                    label = ServiceSort::label,
+                    onSelect = viewModel::setServiceSort,
+                )
+            },
         ) { service ->
             ListItem(
                 headlineContent = { Text(service.product.toDisplayName()) },
@@ -141,6 +153,7 @@ private fun BuyContent(
     state: BuyUiState,
     onOpenStep: (BuyStep) -> Unit,
     onBuy: (Offer?) -> Unit,
+    onOfferSortChange: (OfferSort) -> Unit,
 ) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -171,11 +184,19 @@ private fun BuyContent(
 
         if (state.selectedService != null) {
             item {
-                Text(
-                    text = "Operators",
-                    style = MaterialTheme.typography.titleMedium,
-                    modifier = Modifier.padding(top = 8.dp),
-                )
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(text = "Operators", style = MaterialTheme.typography.titleMedium)
+                    SortMenu(
+                        selected = state.offerSort,
+                        options = OfferSort.entries,
+                        label = OfferSort::label,
+                        onSelect = onOfferSortChange,
+                    )
+                }
             }
 
             when {

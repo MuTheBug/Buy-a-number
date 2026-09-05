@@ -5,13 +5,18 @@ import androidx.lifecycle.viewModelScope
 import com.buyanumber.app.core.toFiveSimError
 import com.buyanumber.app.data.repository.AccountRepository
 import com.buyanumber.app.data.repository.OrderRepository
+import com.buyanumber.app.data.local.SettingsStore
 import com.buyanumber.app.domain.model.NumberOrder
+import com.buyanumber.app.domain.model.OrderSort
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -23,6 +28,7 @@ data class OrdersUiState(
     val isRefreshing: Boolean = false,
     val isLoadingMore: Boolean = false,
     val canLoadMore: Boolean = false,
+    val sort: OrderSort = OrderSort.DEFAULT,
     val error: String? = null,
 )
 
@@ -30,6 +36,7 @@ data class OrdersUiState(
 class OrdersViewModel @Inject constructor(
     private val accountRepository: AccountRepository,
     private val orderRepository: OrderRepository,
+    private val settingsStore: SettingsStore,
 ) : ViewModel() {
 
     private data class HistoryState(
@@ -44,8 +51,13 @@ class OrdersViewModel @Inject constructor(
     private val historyState = MutableStateFlow(HistoryState())
 
     val uiState: StateFlow<OrdersUiState> =
-        combine(historyState, orderRepository.activeOrders) { history, active ->
+        combine(
+            historyState,
+            orderRepository.activeOrders,
+            settingsStore.settings,
+        ) { history, active, settings ->
             OrdersUiState(
+                sort = settings.orderSort,
                 active = active,
                 // Live orders get their own section, so keep them out of history.
                 history = history.orders.filterNot { order -> active.any { it.id == order.id } },
@@ -62,36 +74,45 @@ class OrdersViewModel @Inject constructor(
         )
 
     init {
-        refresh()
+        viewModelScope.launch {
+            // Re-fetch page one whenever the ordering changes, since the server
+            // owns the ordering across pages.
+            settingsStore.settings
+                .map { it.orderSort }
+                .distinctUntilChanged()
+                .collect { sort -> load(sort) }
+        }
     }
 
-    fun refresh() {
+    fun setSort(sort: OrderSort) = viewModelScope.launch { settingsStore.setOrderSort(sort) }
+
+    fun refresh() = viewModelScope.launch { load(settingsStore.settings.first().orderSort) }
+
+    private suspend fun load(sort: OrderSort) {
         historyState.update {
             it.copy(isLoading = it.orders.isEmpty(), isRefreshing = it.orders.isNotEmpty(), error = null)
         }
-        viewModelScope.launch {
-            orderRepository.refreshActive()
-            accountRepository.orders(limit = PAGE_SIZE, offset = 0)
-                .onSuccess { page ->
-                    historyState.update {
-                        it.copy(
-                            orders = page.orders,
-                            total = page.total,
-                            isLoading = false,
-                            isRefreshing = false,
-                        )
-                    }
+        orderRepository.refreshActive()
+        accountRepository.orders(limit = PAGE_SIZE, offset = 0, sort = sort)
+            .onSuccess { page ->
+                historyState.update {
+                    it.copy(
+                        orders = page.orders,
+                        total = page.total,
+                        isLoading = false,
+                        isRefreshing = false,
+                    )
                 }
-                .onFailure { throwable ->
-                    historyState.update {
-                        it.copy(
-                            isLoading = false,
-                            isRefreshing = false,
-                            error = throwable.toFiveSimError().userMessage,
-                        )
-                    }
+            }
+            .onFailure { throwable ->
+                historyState.update {
+                    it.copy(
+                        isLoading = false,
+                        isRefreshing = false,
+                        error = throwable.toFiveSimError().userMessage,
+                    )
                 }
-        }
+            }
     }
 
     fun loadMore() {
@@ -100,7 +121,8 @@ class OrdersViewModel @Inject constructor(
 
         historyState.update { it.copy(isLoadingMore = true) }
         viewModelScope.launch {
-            accountRepository.orders(limit = PAGE_SIZE, offset = current.orders.size)
+            val sort = settingsStore.settings.first().orderSort
+            accountRepository.orders(limit = PAGE_SIZE, offset = current.orders.size, sort = sort)
                 .onSuccess { page ->
                     historyState.update { state ->
                         // De-duplicate: a number bought between two page loads

@@ -15,6 +15,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Logout
+import androidx.compose.material.icons.filled.AccountBalanceWallet
+import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -51,7 +53,10 @@ import com.buyanumber.app.ui.components.StatBlock
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AccountScreen(viewModel: AccountViewModel = hiltViewModel()) {
+fun AccountScreen(
+    onAddFunds: () -> Unit,
+    viewModel: AccountViewModel = hiltViewModel(),
+) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     var countryPickerOpen by remember { mutableStateOf(false) }
     var signOutDialogOpen by remember { mutableStateOf(false) }
@@ -72,6 +77,21 @@ fun AccountScreen(viewModel: AccountViewModel = hiltViewModel()) {
             state.error?.let { message -> item { ErrorBanner(message) } }
 
             item { ProfileCard(state.profile) }
+
+            item {
+                ListItem(
+                    headlineContent = { Text("Add funds") },
+                    supportingContent = { Text("Top up your 5sim balance") },
+                    leadingContent = {
+                        Icon(Icons.Default.AccountBalanceWallet, contentDescription = null)
+                    },
+                    trailingContent = { Icon(Icons.Default.ChevronRight, contentDescription = null) },
+                    colors = ListItemDefaults.colors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                    ),
+                    modifier = Modifier.clickable(onClick = onAddFunds),
+                )
+            }
 
             item { SectionTitle("Preferences") }
 

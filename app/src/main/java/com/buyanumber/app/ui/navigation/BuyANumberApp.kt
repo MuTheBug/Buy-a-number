@@ -27,6 +27,7 @@ import com.buyanumber.app.ui.components.LoadingState
 import com.buyanumber.app.ui.screens.account.AccountScreen
 import com.buyanumber.app.ui.screens.buy.BuyScreen
 import com.buyanumber.app.ui.screens.dashboard.DashboardScreen
+import com.buyanumber.app.ui.screens.deposit.DepositScreen
 import com.buyanumber.app.ui.screens.orderdetail.OrderDetailScreen
 import com.buyanumber.app.ui.screens.orders.OrdersScreen
 import com.buyanumber.app.ui.screens.signin.SignInScreen
@@ -101,6 +102,7 @@ private fun MainShell(
                 DashboardScreen(
                     onOpenOrder = { navController.navigate(Routes.orderDetail(it)) },
                     onBuyNumber = { navController.navigateToTab(TopLevelDestination.BUY) },
+                    onAddFunds = { navController.navigate(Routes.DEPOSIT) },
                 )
             }
 
@@ -115,7 +117,11 @@ private fun MainShell(
             }
 
             composable(Routes.ACCOUNT) {
-                AccountScreen()
+                AccountScreen(onAddFunds = { navController.navigate(Routes.DEPOSIT) })
+            }
+
+            composable(Routes.DEPOSIT) {
+                DepositScreen(onBack = { navController.popBackStack() })
             }
 
             composable(

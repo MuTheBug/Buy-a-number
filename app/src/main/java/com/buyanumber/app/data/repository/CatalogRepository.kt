@@ -45,9 +45,9 @@ class CatalogRepository @Inject constructor(
     }
 
     /**
-     * Services available in a country, cheapest first by price with stock.
-     * `any` as the operator asks 5sim to roll every operator up into one row
-     * per service.
+     * Services available in a country. `any` as the operator asks 5sim to roll
+     * every operator up into one row per service. Ordering is left to the
+     * caller so the user's sort choice never costs a network round trip.
      */
     suspend fun services(country: String): Result<List<ServiceSummary>> = apiCall {
         api.products(country, FiveSimApi.ANY)
@@ -55,14 +55,12 @@ class CatalogRepository @Inject constructor(
             .map { (product, dto) ->
                 ServiceSummary(product = product, cheapestPrice = dto.price, available = dto.quantity)
             }
-            .sortedWith(compareByDescending<ServiceSummary> { it.available > 0 }.thenBy { it.product })
     }
 
     /** Per-operator price, stock and success rate for one service in one country. */
     suspend fun offers(country: String, product: String): Result<List<Offer>> = apiCall {
         val tree = api.prices(country = country, product = product)
         flattenPrices(tree, fallbackCountry = country, fallbackProduct = product, json = json)
-            .sortedWith(compareByDescending<Offer> { it.inStock }.thenBy { it.price })
     }
 
     private companion object {

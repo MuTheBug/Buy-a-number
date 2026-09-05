@@ -8,14 +8,19 @@ import com.buyanumber.app.data.repository.CatalogRepository
 import com.buyanumber.app.data.repository.OrderRepository
 import com.buyanumber.app.domain.model.CountryInfo
 import com.buyanumber.app.domain.model.Offer
+import com.buyanumber.app.domain.model.OfferSort
+import com.buyanumber.app.domain.model.ServiceSort
 import com.buyanumber.app.domain.model.ServiceSummary
+import com.buyanumber.app.domain.model.sortedBy
 import com.buyanumber.app.work.OrderTracker
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
@@ -26,6 +31,8 @@ data class BuyUiState(
     val countries: List<CountryInfo> = emptyList(),
     val services: List<ServiceSummary> = emptyList(),
     val offers: List<Offer> = emptyList(),
+    val offerSort: OfferSort = OfferSort.DEFAULT,
+    val serviceSort: ServiceSort = ServiceSort.DEFAULT,
     val selectedCountry: CountryInfo? = null,
     val selectedService: ServiceSummary? = null,
     val isLoadingCountries: Boolean = true,
@@ -46,7 +53,24 @@ class BuyViewModel @Inject constructor(
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(BuyUiState())
-    val uiState: StateFlow<BuyUiState> = _uiState.asStateFlow()
+
+    /**
+     * Sorting is applied when the state is read rather than when the lists are
+     * fetched, so switching the order is instant and never hits the network.
+     */
+    val uiState: StateFlow<BuyUiState> =
+        combine(_uiState, settingsStore.settings) { state, settings ->
+            state.copy(
+                services = state.services.sortedBy(settings.serviceSort),
+                offers = state.offers.sortedBy(settings.offerSort),
+                offerSort = settings.offerSort,
+                serviceSort = settings.serviceSort,
+            )
+        }.stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5_000),
+            initialValue = BuyUiState(),
+        )
 
     init {
         loadCountries()
@@ -149,6 +173,12 @@ class BuyViewModel @Inject constructor(
                     }
                 }
         }
+    }
+
+    fun setOfferSort(sort: OfferSort) = viewModelScope.launch { settingsStore.setOfferSort(sort) }
+
+    fun setServiceSort(sort: ServiceSort) = viewModelScope.launch {
+        settingsStore.setServiceSort(sort)
     }
 
     /** Called once the screen has navigated to the new order. */

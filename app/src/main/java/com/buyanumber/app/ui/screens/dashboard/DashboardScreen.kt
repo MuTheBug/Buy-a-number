@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -45,6 +46,7 @@ import com.buyanumber.app.ui.components.StatBlock
 fun DashboardScreen(
     onOpenOrder: (Long) -> Unit,
     onBuyNumber: () -> Unit,
+    onAddFunds: () -> Unit,
     viewModel: DashboardViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -72,7 +74,11 @@ fun DashboardScreen(
                 }
 
                 item {
-                    BalanceCard(profile = state.profile, onBuyNumber = onBuyNumber)
+                    BalanceCard(
+                        profile = state.profile,
+                        onBuyNumber = onBuyNumber,
+                        onAddFunds = onAddFunds,
+                    )
                 }
 
                 item {
@@ -101,7 +107,7 @@ fun DashboardScreen(
 }
 
 @Composable
-private fun BalanceCard(profile: Profile?, onBuyNumber: () -> Unit) {
+private fun BalanceCard(profile: Profile?, onBuyNumber: () -> Unit, onAddFunds: () -> Unit) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
@@ -147,13 +153,21 @@ private fun BalanceCard(profile: Profile?, onBuyNumber: () -> Unit) {
             }
 
             Spacer(Modifier.height(16.dp))
-            FilledTonalButton(
-                onClick = onBuyNumber,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.width(8.dp))
-                Text("Buy a number")
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FilledTonalButton(onClick = onBuyNumber, modifier = Modifier.weight(1f)) {
+                    Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("Buy")
+                }
+                FilledTonalButton(onClick = onAddFunds, modifier = Modifier.weight(1f)) {
+                    Icon(
+                        Icons.Default.AccountBalanceWallet,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text("Add funds")
+                }
             }
         }
     }

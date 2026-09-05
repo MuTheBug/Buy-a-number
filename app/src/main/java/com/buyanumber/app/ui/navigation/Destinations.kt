@@ -14,6 +14,7 @@ object Routes {
     const val ORDERS = "orders"
     const val ACCOUNT = "account"
     const val PAYMENTS = "payments"
+    const val DEPOSIT = "deposit"
 
     const val ORDER_ID_ARG = "orderId"
     const val ORDER_DETAIL = "order/{$ORDER_ID_ARG}"
