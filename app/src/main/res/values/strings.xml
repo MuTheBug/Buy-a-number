@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Buy a Number</string>
+    <string name="sms_channel_name">Incoming SMS</string>
+    <string name="sms_channel_description">Alerts when a verification code arrives for one of your numbers.</string>
+</resources>
