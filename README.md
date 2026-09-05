@@ -14,6 +14,14 @@ see what you are paying for before you commit. Both pickers are searchable,
 which matters when the catalog runs to ~200 countries and several hundred
 services.
 
+**Find the cheapest country** — the buy screen has a second mode that inverts
+the flow: name a service and every country is ranked by what its cheapest
+in-stock operator charges, so "where is WhatsApp cheapest right now" is one
+screen rather than 200 lookups. It opens on WhatsApp, remembers whichever
+service you pick, and reopens in whichever mode you left it in. Buying from the
+ranking skips the operator step behind a price confirmation. Countries with
+nothing in stock are dropped rather than listed at a price nobody can pay.
+
 **Sort** — operators sort by price (either direction), remaining stock or
 success rate; services by name, price or stock; order history by newest or
 oldest. Sold-out rows always sink to the bottom, whatever the sort — a sold-out
@@ -86,6 +94,8 @@ sign in.
 | `GET guest/countries` | Country list, ISO codes and dialling prefixes |
 | `GET guest/products/{country}/{operator}` | Services for a country |
 | `GET guest/prices?country=&product=` | Per-operator price, stock, success rate |
+| `GET guest/prices?product=` | Every country's price for one service, for the cheapest-country ranking |
+| `GET guest/products/any/any` | The global service catalog, when no country is picked yet |
 
 Note what is **not** there: 5sim has no deposit endpoint. `user/payments` reads
 history but nothing creates a payment, which is why topping up opens
@@ -134,8 +144,9 @@ so a killed worker process does not replay old alerts.
 ./gradlew testDebugUnitTest
 ```
 
-49 tests covering verification-code extraction, the timestamp formats 5sim
+56 tests covering verification-code extraction, the timestamp formats 5sim
 emits, the plain-text error mapping (end to end through OkHttp with
 MockWebServer), every shape of the `guest/prices` tree, the documented response
-payloads, and every sort comparator including the sold-out and missing-rate
-edge cases.
+payloads, every sort comparator including the sold-out and missing-rate edge
+cases, and the country ranking — which operator represents a country, and which
+countries get dropped.

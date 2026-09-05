@@ -119,6 +119,24 @@ data class Offer(
     val inStock: Boolean get() = available > 0
 }
 
+/**
+ * The best price one country offers for a service, rolled up across its
+ * operators. This is the row in the "cheapest country" ranking.
+ */
+data class CountryOffer(
+    val country: CountryInfo,
+    /** The operator actually quoting [price] — the one a purchase will use. */
+    val bestOperator: String,
+    val price: Double,
+    /** Numbers available from [bestOperator], not the country total. */
+    val available: Int,
+    val successRate: Double?,
+    /** How many operators sell this service here, for "3 operators" subtext. */
+    val operatorCount: Int,
+) {
+    val inStock: Boolean get() = available > 0
+}
+
 /** A service rolled up across operators, for the service picker. */
 data class ServiceSummary(
     val product: String,

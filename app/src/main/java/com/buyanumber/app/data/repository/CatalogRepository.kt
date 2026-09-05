@@ -4,6 +4,7 @@ import com.buyanumber.app.core.apiCall
 import com.buyanumber.app.data.mapper.toDomain
 import com.buyanumber.app.data.remote.FiveSimApi
 import com.buyanumber.app.domain.model.CountryInfo
+import com.buyanumber.app.domain.model.CountryOffer
 import com.buyanumber.app.domain.model.Offer
 import com.buyanumber.app.domain.model.ServiceSummary
 import javax.inject.Inject
@@ -55,6 +56,37 @@ class CatalogRepository @Inject constructor(
             .map { (product, dto) ->
                 ServiceSummary(product = product, cheapestPrice = dto.price, available = dto.quantity)
             }
+    }
+
+    /**
+     * Every service 5sim sells anywhere, for the service-first flow where no
+     * country has been chosen yet. `any/any` asks for the global catalog.
+     */
+    suspend fun allServices(): Result<List<ServiceSummary>> = apiCall {
+        api.products(FiveSimApi.ANY, FiveSimApi.ANY)
+            .filter { (_, dto) -> dto.category.equals(ACTIVATION, ignoreCase = true) }
+            .map { (product, dto) ->
+                ServiceSummary(product = product, cheapestPrice = dto.price, available = dto.quantity)
+            }
+    }
+
+    /**
+     * Ranks every country by what it charges for one service.
+     *
+     * Filtering `guest/prices` by product alone returns the whole
+     * country -> operator tree for that service, which is the one call that
+     * answers "where is WhatsApp cheapest right now". Each country is reduced
+     * to the operator actually quoting the lowest in-stock price, since that is
+     * the one a purchase would use.
+     */
+    suspend fun cheapestByCountry(product: String): Result<List<CountryOffer>> = apiCall {
+        val tree = api.prices(product = product)
+        val offers = flattenPrices(tree, fallbackCountry = null, fallbackProduct = product, json = json)
+
+        // Country metadata is a separate endpoint; without it the ranking would
+        // show raw slugs.
+        val known = countries().getOrNull().orEmpty().associateBy { it.code }
+        rankCountriesByPrice(offers, known)
     }
 
     /** Per-operator price, stock and success rate for one service in one country. */

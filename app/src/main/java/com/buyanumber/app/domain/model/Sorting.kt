@@ -7,6 +7,25 @@ package com.buyanumber.app.domain.model
  * sold-out operator at a great price is still not something you can buy — so
  * every comparator here is applied *after* an availability check.
  */
+/**
+ * The two ways into a purchase.
+ *
+ * [BY_COUNTRY] is the classic drill-down. [CHEAPEST] inverts it: name the
+ * service and every country is ranked by what it charges, which is the only
+ * way to answer "where is this cheapest right now" without opening 200
+ * countries by hand.
+ */
+enum class BuyMode(val label: String) {
+    BY_COUNTRY("By country"),
+    CHEAPEST("Cheapest country");
+
+    companion object {
+        val DEFAULT = BY_COUNTRY
+
+        fun from(name: String?): BuyMode = entries.firstOrNull { it.name == name } ?: DEFAULT
+    }
+}
+
 enum class OfferSort(val label: String) {
     PRICE_LOW("Price: low to high"),
     PRICE_HIGH("Price: high to low"),
@@ -64,6 +83,25 @@ fun List<Offer>.sortedBy(sort: OfferSort): List<Offer> {
         compareByDescending<Offer> { it.inStock }
             .then(within)
             .thenBy { it.operator },
+    )
+}
+
+/**
+ * Country rankings reuse the operator sort options, since a country row is
+ * just its cheapest operator wearing a flag.
+ */
+@JvmName("sortCountryOffers")
+fun List<CountryOffer>.sortedBy(sort: OfferSort): List<CountryOffer> {
+    val within: Comparator<CountryOffer> = when (sort) {
+        OfferSort.PRICE_LOW -> compareBy { it.price }
+        OfferSort.PRICE_HIGH -> compareByDescending { it.price }
+        OfferSort.AVAILABILITY -> compareByDescending { it.available }
+        OfferSort.SUCCESS_RATE -> compareByDescending { it.successRate ?: -1.0 }
+    }
+    return sortedWith(
+        compareByDescending<CountryOffer> { it.inStock }
+            .then(within)
+            .thenBy { it.country.name.lowercase() },
     )
 }
 

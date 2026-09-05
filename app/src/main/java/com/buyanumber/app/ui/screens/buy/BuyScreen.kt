@@ -17,6 +17,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -24,6 +25,10 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
@@ -41,7 +46,9 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.buyanumber.app.core.formatMoney
 import com.buyanumber.app.core.formatRate
 import com.buyanumber.app.core.toDisplayName
+import com.buyanumber.app.domain.model.BuyMode
 import com.buyanumber.app.domain.model.CountryInfo
+import com.buyanumber.app.domain.model.CountryOffer
 import com.buyanumber.app.domain.model.Offer
 import com.buyanumber.app.domain.model.OfferSort
 import com.buyanumber.app.domain.model.ServiceSort
@@ -65,6 +72,7 @@ fun BuyScreen(
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     var openStep by remember { mutableStateOf<BuyStep?>(null) }
+    var pendingPurchase by remember { mutableStateOf<CountryOffer?>(null) }
 
     LaunchedEffect(state.purchasedOrderId) {
         state.purchasedOrderId?.let { orderId ->
@@ -76,6 +84,20 @@ fun BuyScreen(
     Column(Modifier.fillMaxSize()) {
         TopAppBar(title = { Text("Buy a number") })
 
+        SingleChoiceSegmentedButtonRow(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+        ) {
+            BuyMode.entries.forEachIndexed { index, mode ->
+                SegmentedButton(
+                    selected = state.mode == mode,
+                    onClick = { viewModel.setMode(mode) },
+                    shape = SegmentedButtonDefaults.itemShape(index, BuyMode.entries.size),
+                ) { Text(mode.label) }
+            }
+        }
+
         when {
             state.isLoadingCountries -> LoadingState()
             state.countries.isEmpty() && state.error != null ->
@@ -85,6 +107,7 @@ fun BuyScreen(
                 onOpenStep = { openStep = it },
                 onBuy = viewModel::buy,
                 onOfferSortChange = viewModel::setOfferSort,
+                onSelectRankedCountry = { pendingPurchase = it },
             )
         }
     }
@@ -144,7 +167,61 @@ fun BuyScreen(
             )
         }
 
+        BuyStep.CHEAPEST_SERVICE -> SearchableSheet(
+            title = "Price which service?",
+            items = state.allServices,
+            searchText = ServiceSummary::product,
+            key = ServiceSummary::product,
+            placeholder = "Search services",
+            emptyMessage = "Loading services…",
+            onDismiss = { openStep = null },
+        ) { service ->
+            ListItem(
+                headlineContent = { Text(service.product.toDisplayName()) },
+                supportingContent = {
+                    Text(
+                        if (service.available > 0) {
+                            "${service.available} available worldwide"
+                        } else {
+                            "Out of stock"
+                        },
+                    )
+                },
+                modifier = Modifier.clickable {
+                    viewModel.setCheapestService(service.product)
+                    openStep = null
+                },
+            )
+        }
+
         BuyStep.OPERATOR, null -> Unit
+    }
+
+    // Buying from the ranking skips the operator step, so confirm the price
+    // rather than spending money on a single tap.
+    pendingPurchase?.let { offer ->
+        AlertDialog(
+            onDismissRequest = { pendingPurchase = null },
+            title = { Text("Buy in ${offer.country.name}?") },
+            text = {
+                Text(
+                    "${state.cheapestService.toDisplayName()} from " +
+                        "${offer.bestOperator.toDisplayName()} for ${formatMoney(offer.price)}. " +
+                        "${offer.available} numbers left.",
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        pendingPurchase = null
+                        viewModel.buyFromRanking(offer)
+                    },
+                ) { Text("Buy for ${formatMoney(offer.price)}") }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingPurchase = null }) { Text("Cancel") }
+            },
+        )
     }
 }
 
@@ -154,6 +231,7 @@ private fun BuyContent(
     onOpenStep: (BuyStep) -> Unit,
     onBuy: (Offer?) -> Unit,
     onOfferSortChange: (OfferSort) -> Unit,
+    onSelectRankedCountry: (CountryOffer) -> Unit,
 ) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -161,6 +239,16 @@ private fun BuyContent(
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         state.error?.let { message -> item { ErrorBanner(message) } }
+
+        if (state.mode == BuyMode.CHEAPEST) {
+            cheapestCountriesSection(
+                state = state,
+                onPickService = { onOpenStep(BuyStep.CHEAPEST_SERVICE) },
+                onSelectCountry = onSelectRankedCountry,
+                onSortChange = onOfferSortChange,
+            )
+            return@LazyColumn
+        }
 
         item {
             SelectionCard(

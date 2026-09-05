@@ -6,7 +6,9 @@ import com.buyanumber.app.core.toFiveSimError
 import com.buyanumber.app.data.local.SettingsStore
 import com.buyanumber.app.data.repository.CatalogRepository
 import com.buyanumber.app.data.repository.OrderRepository
+import com.buyanumber.app.domain.model.BuyMode
 import com.buyanumber.app.domain.model.CountryInfo
+import com.buyanumber.app.domain.model.CountryOffer
 import com.buyanumber.app.domain.model.Offer
 import com.buyanumber.app.domain.model.OfferSort
 import com.buyanumber.app.domain.model.ServiceSort
@@ -25,12 +27,18 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 /** Which picker sheet the buy screen currently has open. */
-enum class BuyStep { COUNTRY, SERVICE, OPERATOR }
+enum class BuyStep { COUNTRY, SERVICE, OPERATOR, CHEAPEST_SERVICE }
 
 data class BuyUiState(
+    val mode: BuyMode = BuyMode.DEFAULT,
     val countries: List<CountryInfo> = emptyList(),
     val services: List<ServiceSummary> = emptyList(),
     val offers: List<Offer> = emptyList(),
+    /** Countries ranked by price for [cheapestService], in CHEAPEST mode. */
+    val countryOffers: List<CountryOffer> = emptyList(),
+    val cheapestService: String = "",
+    val allServices: List<ServiceSummary> = emptyList(),
+    val isLoadingCountryOffers: Boolean = false,
     val offerSort: OfferSort = OfferSort.DEFAULT,
     val serviceSort: ServiceSort = ServiceSort.DEFAULT,
     val selectedCountry: CountryInfo? = null,
@@ -61,8 +69,12 @@ class BuyViewModel @Inject constructor(
     val uiState: StateFlow<BuyUiState> =
         combine(_uiState, settingsStore.settings) { state, settings ->
             state.copy(
+                mode = settings.buyMode,
+                cheapestService = settings.cheapestService,
                 services = state.services.sortedBy(settings.serviceSort),
+                allServices = state.allServices.sortedBy(settings.serviceSort),
                 offers = state.offers.sortedBy(settings.offerSort),
+                countryOffers = state.countryOffers.sortedBy(settings.offerSort),
                 offerSort = settings.offerSort,
                 serviceSort = settings.serviceSort,
             )
@@ -74,6 +86,65 @@ class BuyViewModel @Inject constructor(
 
     init {
         loadCountries()
+        viewModelScope.launch {
+            val settings = settingsStore.settings.first()
+            // Load the ranking up front when the user left the app in this
+            // mode, so it is already on screen rather than a tap away.
+            if (settings.buyMode == BuyMode.CHEAPEST) {
+                loadCheapestCountries(settings.cheapestService)
+            }
+        }
+    }
+
+    fun setMode(mode: BuyMode) {
+        viewModelScope.launch {
+            settingsStore.setBuyMode(mode)
+            if (mode == BuyMode.CHEAPEST && _uiState.value.countryOffers.isEmpty()) {
+                loadCheapestCountries(settingsStore.settings.first().cheapestService)
+            }
+        }
+    }
+
+    /** Changes which service the country ranking is priced against. */
+    fun setCheapestService(product: String) {
+        viewModelScope.launch {
+            settingsStore.setCheapestService(product)
+            loadCheapestCountries(product)
+        }
+    }
+
+    fun refreshCheapest() {
+        viewModelScope.launch {
+            loadCheapestCountries(settingsStore.settings.first().cheapestService)
+        }
+    }
+
+    private suspend fun loadCheapestCountries(product: String) {
+        _uiState.update { it.copy(isLoadingCountryOffers = true, error = null) }
+        catalogRepository.cheapestByCountry(product)
+            .onSuccess { ranked ->
+                _uiState.update { it.copy(countryOffers = ranked, isLoadingCountryOffers = false) }
+            }
+            .onFailure { throwable ->
+                _uiState.update {
+                    it.copy(
+                        isLoadingCountryOffers = false,
+                        error = throwable.toFiveSimError().userMessage,
+                    )
+                }
+            }
+        loadAllServicesIfNeeded()
+    }
+
+    /**
+     * The service picker in this mode cannot be scoped to a country, so it uses
+     * 5sim's global catalog. Fetched once and kept.
+     */
+    private suspend fun loadAllServicesIfNeeded() {
+        if (_uiState.value.allServices.isNotEmpty()) return
+        catalogRepository.allServices().onSuccess { services ->
+            _uiState.update { it.copy(allServices = services) }
+        }
     }
 
     private fun loadCountries() {
@@ -162,6 +233,32 @@ class BuyViewModel @Inject constructor(
                 product = service.product,
                 // Guard against a price change between listing and purchase.
                 maxPrice = offer?.price,
+            )
+                .onSuccess { order ->
+                    orderTracker.scheduleNextPoll()
+                    _uiState.update { it.copy(isBuying = false, purchasedOrderId = order.id) }
+                }
+                .onFailure { throwable ->
+                    _uiState.update {
+                        it.copy(isBuying = false, error = throwable.toFiveSimError().userMessage)
+                    }
+                }
+        }
+    }
+
+    /** Buys the cheapest operator in [countryOffer], from the ranked list. */
+    fun buyFromRanking(countryOffer: CountryOffer) {
+        if (_uiState.value.isBuying) return
+        val product = _uiState.value.cheapestService
+        if (product.isBlank()) return
+
+        _uiState.update { it.copy(isBuying = true, error = null) }
+        viewModelScope.launch {
+            orderRepository.buy(
+                country = countryOffer.country.code,
+                operator = countryOffer.bestOperator,
+                product = product,
+                maxPrice = countryOffer.price,
             )
                 .onSuccess { order ->
                     orderTracker.scheduleNextPoll()
